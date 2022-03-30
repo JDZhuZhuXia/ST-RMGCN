@@ -115,7 +115,7 @@ def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:
     raise RuntimeError(supported_freq_msg)
 
 def generate_graph_seq2seq_io_data(
-        df, x_offsets, y_offsets, scaler = None
+        df, x_offsets, y_offsets, c_in=1, scaler = None
 ) :
     """
     :param df:
@@ -130,41 +130,13 @@ def generate_graph_seq2seq_io_data(
 
     num_samples, num_nodes = df.shape
     data = np.expand_dims(df , axis = -1).astype(np.float32)
-#     data = np.expand_dims(data, axis=0).astype(np.float32)
-    
-#     time_ind = (df.index.values - df.index.values.astype("datetime64[D]")) / np.timedelta64(5, "m")
-#     time_in_day = np.tile(time_ind, [1, num_nodes, 1]).transpose((2, 1, 0))#title 扩张
-#     time_in_day = np.expand_dims(time_in_day,axis=0)
     freq = '5T'
     data_stamp = np.vstack([feat(pd.to_datetime(df.index.values)) for feat in time_features_from_frequency_str(freq)]).transpose(1, 0).astype(np.float32)
-#     embed = DataEmbedding(c_in, d_model)
-    
-#加入时间特征5
 #     data_stamp = np.expand_dims(data_stamp,axis = 0)  
-    data_stamp = np.expand_dims(data_stamp,axis = 1).repeat(207,axis = 1)
-
-#加入统计特征5 每周 各时间片的统计值
-    df = np.array(df).reshape(num_samples//288,288,num_nodes)
-    df = df.reshape(num_samples//288//7,7,288,num_nodes,1)
-    
-#     statistic_data = np.array([i*288 for i in range(df.shape[0]//288)])
-#     for i in range(288):
-#         day_data.append(df[i + statistic_data])
-    
-    data_mean = np.expand_dims(np.mean(df,1),1)
-    data_max = np.expand_dims(np.max(df,1),1)
-    data_min = np.expand_dims(np.min(df,1),1)
-    data_std = np.expand_dims(np.std(df,1),1)
-    data_median = np.expand_dims(np.median(df,1),1)
-    day_data = np.concatenate((data_mean,data_max,data_min,data_median,data_std),axis=4) #shape = 17*1*288*207*5   
-    day_data = np.tile(day_data,(1,7,1,1,1)).astype(np.float32).reshape(num_samples,num_nodes,5)
-    
-    
-#     data_embed = embed(data,data_stamp)
-    print(data_stamp.shape,data.shape,day_data.shape)
-    data_embed = np.concatenate((data,day_data,data_stamp),axis = 2)
+    data_stamp = np.expand_dims(data_stamp,axis = 1).repeat(num_nodes,axis = 1)
+    data_embed = np.concatenate((data,data_stamp),axis = 2)
 #     data_embed = np.squeeze(data_embed,axis = 0)
-
+    print(data_stamp.shape,data_embed.shape)
     x = []
     y = []
     min_t = abs(min(x_offsets))
@@ -173,31 +145,32 @@ def generate_graph_seq2seq_io_data(
     for t in range(min_t,max_t):
         x.append(data_embed[t + x_offsets])
         y.append(data_embed[t + y_offsets])
-    
-    mem = psutil.virtual_memory()
-    ysy = float(mem.used)/1024/1024/1024
-    print('检查点2已使用内存：',ysy)
     x = np.stack(x,axis = 0)
     y = np.stack(y,axis = 0)
+    print(x.shape,y.shape)
     return x,y
 
 
 
 def generate_train_val_test(args):
+    
     seq_length_x,seq_length_y = args.seq_length_x,args.seq_length_y
-    df = pd.read_hdf(args.traffic_df_filename)#加载数据y
-    x_offsets = np.sort(np.arange(-(seq_length_x - 1),1,1))#concatenate多个数组拼接
+    df = pd.read_hdf(args.traffic_df_filename)
+    
+    x_offsets = np.sort(np.arange(-(seq_length_x - 1),1,1))
 
     y_offsets = np.sort(np.arange(args.y_start, (seq_length_y + 1), 1))
+
     x,y = generate_graph_seq2seq_io_data(
         df,
         x_offsets = x_offsets,
         y_offsets = y_offsets,
+        c_in=args.c_in,
+
     )
 
     print('x.shape is:',x.shape,'y.shape is:',y.shape)
 
-    #数据分为三份存储
     num_samples = len(x)
     num_test = round(num_samples*0.2)
     num_train = round(num_samples*0.7)
@@ -219,19 +192,19 @@ def generate_train_val_test(args):
 parser = argparse.ArgumentParser()
 parser.add_argument('--output_dir',type = str,default='Data/METR-LA')
 parser.add_argument('--traffic_df_filename',type = str,default='Data/metr-la.h5')
+
 parser.add_argument('--seq_length_x',type = int,default=12)
 parser.add_argument('--seq_length_y',type=int ,default=12)
-# parser.add_argument('--c_in',type=int ,default=1)
-# parser.add_argument('--d_model',type=int ,default=8)
+parser.add_argument('--c_in',type=int ,default=1)
+
 parser.add_argument('--y_start',type=int,default=1)
+parser.add_argument('--dow',action='store_true')
 
 args = parser.parse_args()
 
 if os.path.exists(args.output_dir):
-    reply = str(input(f'{args.output_dir} exists.Do you want to overwrite it ? (y/n) ')).lower().strip()#strip()去除空格或指定字符
+    reply = str(input(f'{args.output_dir} exists.Do you want to overwrite it ? (y/n) ')).lower().strip()
     if reply[0] != 'y': exit()
 else :
     os.makedirs(args.output_dir)
 generate_train_val_test(args)
-
-#生成训练数据 维度为 （23974, 12, 207, 2）
