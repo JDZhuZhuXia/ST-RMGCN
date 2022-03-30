@@ -129,9 +129,9 @@ class ConvLayer(nn.Module):
         return x
 
 
-class gwnet(nn.Module):
+class RMGCN(nn.Module):
     def __init__(self, device, num_nodes, dropout=0.3, supports=None, gcn_bool=True, addaptadj=True, adddymadj=True, aptinit=None, in_dim=2,out_dim=12,residual_channels=64,dilation_channels=64,skip_channels=256,end_channels=512,kernel_size=2,blocks=4,layers=2,dim=40,head=4):
-        super(gwnet, self).__init__()
+        super(RMGCN, self).__init__()
         self.dropout = dropout
         self.blocks = blocks
         self.layers = layers
