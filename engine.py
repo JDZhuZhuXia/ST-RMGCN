@@ -3,7 +3,7 @@ from model import *
 import util
 class trainer():
     def __init__(self, scaler,in_dim, seq_length, num_nodes, nhid , dropout, lrate, wdecay, device, supports, gcn_bool, addaptadj, adddymadj,  aptinit):
-        self.model = gwnet(device, num_nodes, dropout, supports=supports, gcn_bool=gcn_bool, addaptadj=addaptadj, adddymadj=adddymadj, aptinit=aptinit, in_dim=in_dim, out_dim=seq_length, residual_channels=nhid, dilation_channels=nhid, skip_channels=nhid * 4, end_channels=nhid * 8)
+        self.model = RMGCN(device, num_nodes, dropout, supports=supports, gcn_bool=gcn_bool, addaptadj=addaptadj, adddymadj=adddymadj, aptinit=aptinit, in_dim=in_dim, out_dim=seq_length, residual_channels=nhid, dilation_channels=nhid, skip_channels=nhid * 4, end_channels=nhid * 8)
         self.model.to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=lrate, weight_decay=wdecay)
         self.loss = util.masked_mae
@@ -19,7 +19,7 @@ class trainer():
         output = self.model(input)
         output = output.transpose(1,3)
         #output = [batch_size,12,num_nodes,1]
-        real = torch.unsqueeze(real_val[:, 0, :, :],dim=1)#增加维度
+        real = torch.unsqueeze(real_val[:, 0, :, :],dim=1)
         predict = self.scaler.inverse_transform(output)
         loss = self.loss(predict, real, 0.0)
         loss.backward()
